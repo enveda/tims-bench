@@ -1,0 +1,71 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "benchmarking"
+version = "1.0.0"
+description = "Codebase for benchmarking public metabolomics tools"
+requires-python = ">=3.13.5"
+readme = "README.md"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.13",
+]
+
+dependencies = [
+    "numba==0.61.2",
+    "pandas==2.3.1",
+    "numpy==2.2.5",
+    "tqdm>=4.67.3",
+    "ipykernel>=7.2.0",
+    "pyarrow>=19.0.0",
+    "ms-entropy>=1.4.2",
+    "pubchempy>=1.0.5",
+    "matplotlib>=3.10.8",
+    "seaborn>=0.13.2",
+    "rdkit>=2025.9.6",
+    "upsetplot>=0.9.0",
+    "matplotlib-venn>=1.1.2",
+    "faiss-cpu>=1.13.2",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["benchmarking"]
+
+[tool.ruff]
+# ruff settings.
+# See here for defaults: https://docs.astral.sh/ruff/configuration/
+# some settings are commented out with examples of how to use them.
+# https://docs.astral.sh/ruff/settings/ for a list of full settings
+
+# Exclude directories in addition to the defaults
+# extend-exclude = ["scripts/hello_world.py"]
+extend-include = ["*.ipynb"]
+
+# Same as Black.
+line-length = 100
+
+[tool.ruff.lint]
+# Enable Pyflakes (`F`) and a subset of the pycodestyle (`E`)  codes by default.
+# Unlike Flake8, Ruff doesn't enable pycodestyle warnings (`W`) or
+# McCabe complexity (`C901`) by default.
+select = ["B", "E", "F", "I"]
+ignore = ["E712"]
+
+[tool.ruff.lint.per-file-ignores]
+# Ignore `E402` (import violations) in all `__init__.py` files
+# "__init__.py" = ["E402"]
+# Ignore line length violations in test files with "snapshots" in the name
+# "tests/**/*snapshots*" = ["E501"]
+"*.ipynb" = ["E501"]
+
+[tool.ruff.format]
+# Like Black, use double quotes for strings.
+quote-style = "double"
+
+# Like Black, respect magic trailing commas.
+skip-magic-trailing-comma = false
+
+# Like Black, automatically detect the appropriate line ending.
+line-ending = "auto"
