@@ -9,6 +9,7 @@ import numpy as np
 import pandas as pd
 
 from ms_entropy import clean_spectrum
+from tqdm import tqdm
 
 from benchmarking.similarity.modified_flashier_entropy import (
     modified_flashier_entropy_search,
@@ -200,8 +201,7 @@ def load_clique_metrics(cache_path: str, input_dataset_directories: list):
             dataset_id = dataset_path.strip("/").split("/")[-1]
             datasets_to_compute.append(dataset_path)
 
-        print(f"Computing clique metrics for {len(datasets_to_compute)} datasets...")
-        for dataset_path in datasets_to_compute:
+        for dataset_path in tqdm(datasets_to_compute, desc="Computing clique metrics"):
             dataset_id = dataset_path.strip("/").split("/")[-1]
             try:
                 metrics = compute_clique_metrics(dataset_path)
@@ -214,9 +214,8 @@ def load_clique_metrics(cache_path: str, input_dataset_directories: list):
                         if k != "clique_sizes"  # Skip numpy array
                     }
                 all_dataset_metrics[dataset_id] = serializable_metrics
-                print(f"  Computed: {dataset_id}")
             except Exception as e:
-                print(f"  Error processing {dataset_id}: {e}")
+                print(f"Error processing {dataset_id}: {e}")
                 continue
 
         # Save to cache if path specified

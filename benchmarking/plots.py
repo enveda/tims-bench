@@ -1640,7 +1640,7 @@ def plot_ccs_distribution(
 
     counts = plot_df.groupby("Software")["CCS Error (%)"].size().reindex(labels)
     ymin, ymax = ax.get_ylim()
-    y_text = ymax - 0.03 * (ymax - ymin)
+    y_text = ymax + 0.03 * (ymax - ymin)
     for i, (tool, n) in enumerate(counts.items()):
         ax.text(i, y_text, f"n={n:,}", ha="center", va="top", fontsize=18)
 
@@ -1667,6 +1667,7 @@ def plot_varied_tolerance_metrics(
     xaxis_label=None,
     yaxis_label=None,
     figsize=(10, 6),
+    y_max=None,
 ):
     """
     Plot a metric vs MS2 tolerance for each tool.
@@ -1691,6 +1692,8 @@ def plot_varied_tolerance_metrics(
         Custom label for the y-axis. If None, a default label based on the metric name will be used.
     figsize : tuple, optional
         Size of the figure (width, height). Defaults to (10, 6).
+    y_max : float, optional
+        Maximum value for the y-axis. If None, it will be set automatically based on the metric type
     """
     fig, ax = plt.subplots(figsize=figsize)
 
@@ -1753,6 +1756,9 @@ def plot_varied_tolerance_metrics(
     # Set y-axis limits based on metric type
     if "threshold" not in metric:
         ax.set_ylim(0, 1.05)
+
+    if y_max is not None:
+        ax.set_ylim(0, y_max)
 
     plt.tight_layout()
 

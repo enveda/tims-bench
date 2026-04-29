@@ -84,8 +84,6 @@ def load_all_feature_tables(
             if file.startswith(".DS_Store"):
                 continue
 
-            print(f"Processing file: {file} in dataset: {dataset_path}")
-
             annotation_paths.append(os.path.join(annotation_path, file))
             harmonized_filepath = os.path.join(annotation_path, file).replace(
                 annotation_subfolder, "harmonized"
