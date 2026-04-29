@@ -1596,6 +1596,127 @@ def plot_ccs_distribution(
     point_alpha=0.45,
     figsize=(15, 8),
 ):
+    """
+    Plots the distribution of CCS errors for each tool using violin plots.
+
+    Parameters:
+    -----------
+    ccs_error_distributions : dict
+        Dictionary mapping tool names to lists of CCS errors (either relative or absolute)
+    save_path : str, optional
+        Path to save the figure. Defaults to None.
+    output_type : str, optional
+        Type of CCS error ('relative' for percentage error, 'absolute' for Å² error). Defaults to 'relative'.
+    show_points : bool, optional
+        Whether to overlay individual data points on the violin plot. Defaults to False.
+    point_jitter : float, optional
+        Amount of jitter to apply to individual points if show_points is True. Defaults to 0.25.
+    point_size : float, optional
+        Size of the individual points if show_points is True. Defaults to 2.5.
+    point_alpha : float, optional
+        Transparency of the individual points if show_points is True. Defaults to 0.45.
+    figsize : tuple, optional
+        Size of the figure. Defaults to (15, 8).
+    """
+    plt.figure(figsize=figsize)
+    data_to_plot = []
+    labels = []
+
+    ccs_error_distributions = dict(sorted(ccs_error_distributions.items()))
+    for tool, errors in ccs_error_distributions.items():
+        data_to_plot.append(errors)
+        labels.append(tool)
+
+    plot_df = pd.DataFrame(
+        {
+            "Software": np.repeat(labels, [len(errors) for errors in data_to_plot]),
+            "CCS Error (%)": np.concatenate(data_to_plot),
+        }
+    )
+
+    sns.violinplot(
+        x="Software",
+        y="CCS Error (%)",
+        data=plot_df,
+        palette=TOOL_COLORS,
+        cut=0,
+    )
+
+    if show_points:
+        sns.stripplot(
+            x="Software",
+            y="CCS Error (%)",
+            data=plot_df,
+            color="black",
+            jitter=point_jitter,
+            size=point_size,
+            alpha=point_alpha,
+        )
+
+    ax = plt.gca()
+    ax.set_xticklabels(
+        [TOOL_NAMES.get(label, label) for label in labels],
+        fontdict={"fontsize": 18},
+    )
+
+    counts = plot_df.groupby("Software")["CCS Error (%)"].size().reindex(labels)
+
+    ymin, ymax = ax.get_ylim()
+    new_ymax = ymax + 20  # add some extra space for the count annotations
+    ax.set_ylim(ymin, new_ymax)  # add some extra space for the count annotations
+    y_text = new_ymax - 0.03 * (new_ymax - ymin)
+
+    for i, (tool, n) in enumerate(counts.items()):
+        ax.text(i, y_text, f"n={n:,}", ha="center", va="top", fontsize=18)
+
+    plt.xlabel("")
+    plt.ylabel(
+        "CCS Error (%)" if output_type == "relative" else "CCS Error (Å²)",
+        fontsize=18,
+        fontweight="bold",
+    )
+    plt.yticks(fontsize=18)
+    plt.title("CCS Error Distributions", fontsize=20, fontweight="bold", pad=15)
+
+    if save_path:
+        plt.savefig(save_path, dpi=400)
+
+
+def plot_zoomed_ccs_distribution(
+    ccs_error_distributions,
+    save_path=None,
+    output_type="relative",
+    show_points=False,
+    point_jitter=0.25,
+    point_size=2.5,
+    point_alpha=0.45,
+    figsize=(15, 8),
+    ymax=None,
+):
+    """
+    Plots the distribution of CCS errors for each tool using violin plots alongside their 1% and 5% cutoff values.
+
+    Parameters:
+    -----------
+    ccs_error_distributions : dict
+        Dictionary mapping tool names to lists of CCS errors (either relative or absolute)
+    save_path : str, optional
+        Path to save the figure. Defaults to None.
+    output_type : str, optional
+        Type of CCS error ('relative' for percentage error, 'absolute' for Å² error). Defaults to 'relative'.
+    show_points : bool, optional
+        Whether to overlay individual data points on the violin plot. Defaults to False.
+    point_jitter : float, optional
+        Amount of jitter to apply to individual points if show_points is True. Defaults to 0.25.
+    point_size : float, optional
+        Size of the individual points if show_points is True. Defaults to 2.5.
+    point_alpha : float, optional
+        Transparency of the individual points if show_points is True. Defaults to 0.45.
+    figsize : tuple, optional
+        Size of the figure. Defaults to (15, 8).
+    ymax : float, optional
+        Maximum value for the y-axis. If None, it will be set automatically based on the data. Defaults to None.
+    """
     plt.figure(figsize=figsize)
     data_to_plot = []
     labels = []
@@ -1638,11 +1759,44 @@ def plot_ccs_distribution(
         fontdict={"fontsize": 18},
     )
 
-    counts = plot_df.groupby("Software")["CCS Error (%)"].size().reindex(labels)
-    ymin, ymax = ax.get_ylim()
-    y_text = ymax + 0.03 * (ymax - ymin)
-    for i, (tool, n) in enumerate(counts.items()):
-        ax.text(i, y_text, f"n={n:,}", ha="center", va="top", fontsize=18)
+    # Add red horizontal lines at ±1% and ±5%
+    cutoffs = [1, 5]
+    linestyles = ["--", "-"]
+    for cutoff, ls in zip(cutoffs, linestyles):
+        ax.axhline(y=cutoff, color="black", linestyle=ls, linewidth=1.2, alpha=0.8)
+        ax.axhline(y=-cutoff, color="black", linestyle=ls, linewidth=1.2, alpha=0.8)
+
+    # Annotate each violin with the % within 1% and 5% cutoffs
+    for i, (tool, errors) in enumerate(zip(labels, data_to_plot)):
+        errors_arr = np.array(errors)
+        pct_1 = np.mean(np.abs(errors_arr) <= 1) * 100
+        pct_5 = np.mean(np.abs(errors_arr) <= 5) * 100
+
+        # Position text just above each cutoff line for this violin
+        x_pos = i
+        ax.text(
+            x_pos + 0.1,
+            1.15,
+            f"{pct_1:.0f}%",
+            ha="left",
+            va="bottom",
+            fontsize=10,
+            color="black",
+            fontweight="bold",
+        )
+        ax.text(
+            x_pos + 0.1,
+            5.15,
+            f"{pct_5:.0f}%",
+            ha="left",
+            va="bottom",
+            fontsize=10,
+            color="black",
+            fontweight="bold",
+        )
+
+    if ymax is not None:
+        ax.set_ylim(-ymax, ymax)
 
     plt.xlabel("")
     plt.ylabel(
