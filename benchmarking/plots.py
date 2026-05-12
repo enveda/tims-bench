@@ -2404,20 +2404,30 @@ def make_spectrum_plot(
     title: str = "Spectra",
     n_cols: int = 2,
     subplot_height: int = 300,
+    x_max: float = 500,
 ) -> go.Figure:
     """
     Plot one or more spectra as a grid of subplots.
 
+    When a spectrum dict contains ``ref_mzs`` and ``ref_intensities`` keys, the subplot
+    becomes a mirror plot: the query spectrum is drawn on top (positive y) and the
+    reference spectrum is drawn on the bottom (negative/inverted y), separated by a
+    zero line.
+
     Args:
         spectra: List of dicts, each with keys:
-            - ``mzs``        (np.ndarray): fragment m/z values.
-            - ``intensities`` (np.ndarray): fragment intensities.
-            - ``title``      (str, optional): subplot title. Defaults to "Spectrum <i>".
-            - ``tool``       (str, optional): tool name used to look up a consistent color
-              from ``TOOL_COLORS``. Falls back to ``"#CCCCCC"`` if not provided or unknown.
+            - ``mzs``             (np.ndarray): query fragment m/z values.
+            - ``intensities``     (np.ndarray): query fragment intensities.
+            - ``ref_mzs``         (np.ndarray, optional): reference fragment m/z values.
+              If provided together with ``ref_intensities``, a mirror plot is rendered.
+            - ``ref_intensities`` (np.ndarray, optional): reference fragment intensities.
+            - ``title``           (str, optional): subplot title. Defaults to "Spectrum <i>".
+            - ``tool``            (str, optional): tool name for consistent color lookup
+              via ``TOOL_COLORS``. Falls back to ``"#CCCCCC"`` if absent or unknown.
         title: Overall figure title.
         n_cols: Number of columns in the subplot grid.
         subplot_height: Height in pixels for each row of subplots.
+        x_max: Upper bound for the shared x-axis (m/z). Defaults to 500.
 
     Returns:
         go.Figure with one subplot per spectrum.
@@ -2433,18 +2443,19 @@ def make_spectrum_plot(
         s.get("title", f"Spectrum {i + 1}") for i, s in enumerate(spectra)
     ]
 
-    # Compute a shared x-axis range across all spectra
+    # Compute a shared x-axis range across all spectra, capped at x_max
     all_mzs = np.concatenate(
         [np.asarray(s["mzs"]) for s in spectra if len(s.get("mzs", [])) > 0]
     )
-    shared_xaxis_range = list(calculate_axis_range_with_padding(all_mzs, padding=10))
+    raw_range = calculate_axis_range_with_padding(all_mzs, padding=10)
+    shared_xaxis_range = [raw_range[0], min(raw_range[1], int(x_max))]
 
     fig = make_subplots(
         rows=n_rows,
         cols=n_cols,
         subplot_titles=subplot_titles,
         shared_xaxes=False,
-        shared_yaxes=False,
+        shared_yaxes=True,
         horizontal_spacing=0.08,
         vertical_spacing=0.12,
     )
@@ -2456,6 +2467,8 @@ def make_spectrum_plot(
         if tool and tool not in seen_tools:
             seen_tools[tool] = TOOL_COLORS.get(tool, "#CCCCCC")
 
+    has_any_reference = False
+
     for i, spectrum in enumerate(spectra):
         row = i // n_cols + 1
         col = i % n_cols + 1
@@ -2466,6 +2479,18 @@ def make_spectrum_plot(
         if len(mzs) == 0 or len(intensities) == 0:
             continue
 
+        ref_mzs_raw = spectrum.get("ref_mzs")
+        ref_ints_raw = spectrum.get("ref_intensities")
+        has_ref = (
+            ref_mzs_raw is not None
+            and ref_ints_raw is not None
+            and len(ref_mzs_raw) > 0
+            and len(ref_ints_raw) > 0
+        )
+        if has_ref:
+            has_any_reference = True
+
+        # Query spectrum (top / positive)
         norm_intensities = normalize_intensities(intensities)
         mzs_gapped = make_gapped_array(mzs)
         intensities_gapped = make_gapped_array(norm_intensities, True, False)
@@ -2479,22 +2504,51 @@ def make_spectrum_plot(
                 y=intensities_gapped,
                 mode="lines",
                 line=dict(color=color),
-                hovertemplate="m/z: %{x}<br>Intensity: %{y}<extra></extra>",
+                hovertemplate="m/z: %{x:.4f}<br>Intensity: %{y:.3f}<extra>Query</extra>",
                 showlegend=False,
             ),
             row=row,
             col=col,
         )
 
+        # Reference spectrum (bottom / negative mirror)
+        if has_ref:
+            ref_mzs_arr = np.asarray(ref_mzs_raw)
+            ref_ints_arr = np.asarray(ref_ints_raw)
+            norm_ref = normalize_intensities(ref_ints_arr)
+            ref_mzs_gapped = make_gapped_array(ref_mzs_arr)
+            ref_ints_gapped = make_gapped_array(
+                norm_ref, intensities=True, negative=True
+            )
+            fig.add_trace(
+                go.Scatter(
+                    x=ref_mzs_gapped,
+                    y=ref_ints_gapped,
+                    mode="lines",
+                    line=dict(color="#888888"),
+                    hovertemplate="m/z: %{x:.4f}<br>Intensity: %{y:.3f}<extra>Reference</extra>",
+                    showlegend=False,
+                ),
+                row=row,
+                col=col,
+            )
+
+        y_range = [-1.1, 1.1] if has_ref else [0, 1.1]
         axis_idx = "" if i == 0 else str(i + 1)
         fig.update_layout(
             {
                 f"xaxis{axis_idx}": dict(title="m/z", range=shared_xaxis_range),
-                f"yaxis{axis_idx}": dict(title="Intensity"),
+                f"yaxis{axis_idx}": dict(
+                    title="Intensity",
+                    range=y_range,
+                    zeroline=has_ref,
+                    zerolinewidth=1,
+                    zerolinecolor="lightgrey",
+                ),
             }
         )
 
-    # Add one invisible dummy trace per tool so the legend shows tool → color mapping
+    # Legend: one dummy trace per tool + one for Reference (if any mirror plots present)
     for tool, color in seen_tools.items():
         label = TOOL_NAMES.get(tool, tool)
         fig.add_trace(
@@ -2508,9 +2562,21 @@ def make_spectrum_plot(
             )
         )
 
-    has_legend = bool(seen_tools)
+    if has_any_reference:
+        fig.add_trace(
+            go.Scatter(
+                x=[None],
+                y=[None],
+                mode="lines",
+                line=dict(color="#888888", width=3),
+                name="Reference",
+                showlegend=True,
+            )
+        )
+
+    has_legend = bool(seen_tools) or has_any_reference
     fig.update_layout(
-        title=dict(text=title, font=dict(size=12)),
+        title=dict(text=title, font=dict(size=15)),
         height=subplot_height * n_rows,
         template="simple_white",
         showlegend=has_legend,
