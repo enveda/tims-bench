@@ -76,6 +76,17 @@ Each dataset folder under `groundtruth_dataset/` and `public_dataset/` follows t
 └── embeddings/                 # DreaMS embedding files (.npz)
 ```
 
+The `library spectra` folder looks like this:
+```text
+.
+├── all_sorted_library_spectra.parquet
+├── all_sorted_library_spectra.npz      # DreaMS embedding files (.npz)
+├── nist_srm_spikein_lib.pq
+├── plant_spikein_lib.pq
+├── reframe_ms2s_with_ccs.parquet
+└── reframe_spikein_lib.pq
+```
+
 ## How to run
 
 1. Clone the repository:

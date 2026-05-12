@@ -8,7 +8,7 @@ warnings.simplefilter(action="ignore", category=FutureWarning)
 warnings.simplefilter(action="ignore", category=UserWarning)
 
 from collections import defaultdict
-from typing import Tuple
+from typing import Tuple, List, Optional
 from io import BytesIO
 from PIL import Image
 import pandas as pd
@@ -19,6 +19,9 @@ import matplotlib.pyplot as plt
 from matplotlib.colors import to_rgba
 from matplotlib_venn import venn3
 from upsetplot import from_contents, UpSet
+
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 
 from benchmarking.ms2_quality import assess_ms2_quality
 from benchmarking.constants import (
@@ -2320,3 +2323,204 @@ def plot_transform_combinations_lineplot(
         plt.savefig(save_path, dpi=400, bbox_inches="tight")
 
     plt.show()
+
+
+def make_gapped_array(
+    arr: List, intensities: bool = False, negative: bool = False
+) -> np.array:
+    """
+    Create a gapped array for plotting.
+
+    Args:
+        arr (List): The input array.
+        intensities (bool): Whether the array represents intensities.
+        negative (bool): Whether to invert the array values.
+
+    Returns:
+        np.array: The gapped array.
+    """
+    arr = np.array(arr)
+
+    if negative:  # needed for the inverted plot
+        arr *= -1
+
+    # [1,2] -> [1,1,1,2,2,2]
+    arr = np.repeat(arr, 3)
+
+    if intensities:
+        # [2,2,2,3,3,3] -> [0,2,2,0,3,3]
+        arr = [np.nan if i % 3 == 0 else x for i, x in enumerate(arr)]
+        # [2,2,2,3,3,3] -> [2,0,2,3,0,3]
+        arr = [0 if i % 3 == 1 else x for i, x in enumerate(arr)]
+        return arr
+
+    arr = [0 if i % 3 == 0 else x for i, x in enumerate(arr)]
+    return arr
+
+
+def normalize_intensities(intensities: np.array, upper_limit=1) -> np.array:
+    """
+    Normalize intensities to a given upper limit.
+
+    Args:
+        intensities (np.array): The input intensities.
+        upper_limit (float): The upper limit for normalization.
+
+    Returns:
+        np.array: The normalized intensities.
+    """
+    return np.array(intensities) * upper_limit / max(intensities)
+
+
+def calculate_axis_range_with_padding(
+    arr1: np.array, arr2: Optional[np.array] = None, padding: float = 10
+) -> Tuple[int, int]:
+    """
+    Calculate the range for a mirror plot.
+
+    Args:
+        arr1 (np.array): The first array.
+        arr2 (np.array): The second array.
+        padding (float): The padding to add to the range.
+
+    Returns:
+        Tuple[int, int]: The range for the x-axis.
+    """
+    # calculate the range of the x axis [leftmost point - 10, rightmost point + 10]
+    if arr2 is None:
+        return (
+            int(min(arr1) - padding),
+            int(max(arr1) + padding),
+        )
+
+    return (
+        int(min([min(arr1), min(arr2)]) - padding),
+        int(max([max(arr1), max(arr2)]) + padding),
+    )
+
+
+def make_spectrum_plot(
+    spectra: List[dict],
+    title: str = "Spectra",
+    n_cols: int = 2,
+    subplot_height: int = 300,
+) -> go.Figure:
+    """
+    Plot one or more spectra as a grid of subplots.
+
+    Args:
+        spectra: List of dicts, each with keys:
+            - ``mzs``        (np.ndarray): fragment m/z values.
+            - ``intensities`` (np.ndarray): fragment intensities.
+            - ``title``      (str, optional): subplot title. Defaults to "Spectrum <i>".
+            - ``tool``       (str, optional): tool name used to look up a consistent color
+              from ``TOOL_COLORS``. Falls back to ``"#CCCCCC"`` if not provided or unknown.
+        title: Overall figure title.
+        n_cols: Number of columns in the subplot grid.
+        subplot_height: Height in pixels for each row of subplots.
+
+    Returns:
+        go.Figure with one subplot per spectrum.
+    """
+    n = len(spectra)
+    if n == 0:
+        return go.Figure()
+
+    n_cols = min(n_cols, n)
+    n_rows = (n + n_cols - 1) // n_cols
+
+    subplot_titles = [
+        s.get("title", f"Spectrum {i + 1}") for i, s in enumerate(spectra)
+    ]
+
+    # Compute a shared x-axis range across all spectra
+    all_mzs = np.concatenate(
+        [np.asarray(s["mzs"]) for s in spectra if len(s.get("mzs", [])) > 0]
+    )
+    shared_xaxis_range = list(calculate_axis_range_with_padding(all_mzs, padding=10))
+
+    fig = make_subplots(
+        rows=n_rows,
+        cols=n_cols,
+        subplot_titles=subplot_titles,
+        shared_xaxes=False,
+        shared_yaxes=False,
+        horizontal_spacing=0.08,
+        vertical_spacing=0.12,
+    )
+
+    # Collect unique (tool, color) pairs in order of first appearance for the legend
+    seen_tools: dict = {}
+    for s in spectra:
+        tool = s.get("tool")
+        if tool and tool not in seen_tools:
+            seen_tools[tool] = TOOL_COLORS.get(tool, "#CCCCCC")
+
+    for i, spectrum in enumerate(spectra):
+        row = i // n_cols + 1
+        col = i % n_cols + 1
+
+        mzs = np.asarray(spectrum["mzs"])
+        intensities = np.asarray(spectrum["intensities"])
+
+        if len(mzs) == 0 or len(intensities) == 0:
+            continue
+
+        norm_intensities = normalize_intensities(intensities)
+        mzs_gapped = make_gapped_array(mzs)
+        intensities_gapped = make_gapped_array(norm_intensities, True, False)
+
+        tool = spectrum.get("tool")
+        color = TOOL_COLORS.get(tool, "#CCCCCC") if tool else "#CCCCCC"
+
+        fig.add_trace(
+            go.Scatter(
+                x=mzs_gapped,
+                y=intensities_gapped,
+                mode="lines",
+                line=dict(color=color),
+                hovertemplate="m/z: %{x}<br>Intensity: %{y}<extra></extra>",
+                showlegend=False,
+            ),
+            row=row,
+            col=col,
+        )
+
+        axis_idx = "" if i == 0 else str(i + 1)
+        fig.update_layout(
+            {
+                f"xaxis{axis_idx}": dict(title="m/z", range=shared_xaxis_range),
+                f"yaxis{axis_idx}": dict(title="Intensity"),
+            }
+        )
+
+    # Add one invisible dummy trace per tool so the legend shows tool → color mapping
+    for tool, color in seen_tools.items():
+        label = TOOL_NAMES.get(tool, tool)
+        fig.add_trace(
+            go.Scatter(
+                x=[None],
+                y=[None],
+                mode="lines",
+                line=dict(color=color, width=3),
+                name=label,
+                showlegend=True,
+            )
+        )
+
+    has_legend = bool(seen_tools)
+    fig.update_layout(
+        title=dict(text=title, font=dict(size=12)),
+        height=subplot_height * n_rows,
+        template="simple_white",
+        showlegend=has_legend,
+        legend=dict(
+            orientation="h",
+            yanchor="top",
+            y=-0.08,
+            xanchor="center",
+            x=0.5,
+            font=dict(size=12),
+        ),
+    )
+    return fig
