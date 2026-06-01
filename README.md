@@ -3,7 +3,6 @@
 <!-- [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.14618408.svg)](TBD)) -->
 
 This repository contains code and data described in detail in our paper (Rajkumar *et al.*, 2026).
-DOI: TDB
 
 ## Table of Contents
 
@@ -17,7 +16,7 @@ DOI: TDB
 
 If you have found our manuscript useful in your work, please consider citing:
 
-> [Rajkumar, P, et al. (2026). TIMS-Bench: Towards community standards for benchmarking untargeted trapped ion mobility metabolomics tools and datasets](TBD).
+> [Rajkumar, P, et al. (2026). TIMS-Bench: Towards community standards for benchmarking untargeted trapped ion mobility metabolomics tools and datasets](https://doi.org/10.64898/2026.05.23.724673).
 
 ## Requirements
 
