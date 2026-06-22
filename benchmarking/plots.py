@@ -1522,7 +1522,7 @@ def plot_specific_pr_curves(
         tp = metrics["TP"]
         fn = metrics["FN"]
         recall = tp / (tp + fn) if (tp + fn) > 0 else 0.0
-        textstr = f"Recall = {tp}/{tp+fn} = {recall:.3f}"
+        textstr = f"Recall = {recall:.2f} ({tp}/{tp+fn})"
         ax.text(
             i * xpos_step + xpos_step / 2,
             ypos,
