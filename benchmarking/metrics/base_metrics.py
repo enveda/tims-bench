@@ -265,6 +265,7 @@ def compute_precision_recall_data(
     true_inchikeys = set(
         ground_truth_data["inchikey_2d"].apply(lambda x: x.split("-")[0]).to_list()
     )
+    print(f"Number of unique true InChIKeys (14-character): {len(true_inchikeys)}")
 
     graph_range = np.arange(0, 1.01, 0.01)
 
@@ -291,7 +292,7 @@ def compute_precision_recall_data(
                 true_inchikeys.difference(set(predicted_inchikeys))
             )
 
-            if precision_type == "pseudo":
+            if precision_type == "pseudo" or f1_type == "pseudo":
                 duplicate_true_positives = len(
                     [item for item in predicted_inchikeys if item in true_inchikeys]
                 )
@@ -322,14 +323,22 @@ def compute_precision_recall_data(
                     else 0
                 )
 
+            if f1_type == "regular":
+                f1_precision = current_precision
+            elif f1_type == "pseudo":
+                f1_precision = (
+                    unique_true_positives
+                    / (duplicate_true_positives + duplicate_false_positives)
+                    if (duplicate_true_positives + duplicate_false_positives) > 0
+                    else 0
+                )
+
             precision_recall_dict[tool]["precision"].append(current_precision)
             precision_recall_dict[tool]["recall"].append(current_recall)
 
             current_f1 = (
-                2
-                * (current_precision * current_recall)
-                / (current_precision + current_recall)
-                if (current_precision + current_recall) > 0
+                2 * (f1_precision * current_recall) / (f1_precision + current_recall)
+                if (f1_precision + current_recall) > 0
                 else 0
             )
 

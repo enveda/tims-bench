@@ -1369,6 +1369,156 @@ def plot_pr_curves(
         plt.savefig(save_path, dpi=400, bbox_inches="tight")
 
 
+def plot_specific_pr_curves(
+    score_range: np.ndarray,
+    precision_recall_curves: dict,
+    confusion_matrix_data: dict,
+    x_var: str,
+    y_var: str,
+    confusion_matrix_threshold: float,
+    title: str = "Precision-Recall Curves",
+    fig_size=(10, 10),
+    save_path=None,
+    ax=None,
+):
+    """
+    Plots precision-recall curves for multiple tools.
+
+
+    Parameters:
+    -----------
+    score_range (np.ndarray):
+        Range of score thresholds used for the curves
+    precision_recall_curves (dict):
+        Dictionary containing precision, recall, f1, and score data for each tool
+    confusion_matrix_data (dict):
+        Dictionary containing confusion matrix metrics (TP, FP, FN, F1) for each tool
+    x_var (str):
+        Variable to plot on the x-axis ('precision', 'recall', 'f1', or 'score')
+    y_var (str):
+        Variable to plot on the y-axis ('precision', 'recall', 'f1', or 'score')
+    confusion_matrix_threshold (float):
+        Threshold for the confusion matrix
+    title (str, optional):
+        Title of the plot. Defaults to "Precision-Recall Curves".
+    fig_size (tuple, optional):
+        Size of the figure. Defaults to (10, 10).
+    save_path (str, optional):
+        Path to save the figure. Defaults to None.
+    ax (matplotlib.axes.Axes, optional):
+        Axes to draw on. If None, a new figure is created. Defaults to None.
+
+    """
+    _fig_created = ax is None
+    if _fig_created:
+        _, ax = plt.subplots(figsize=fig_size)
+    lines = {}
+
+    if x_var not in ["precision", "recall", "f1", "score"]:
+        raise ValueError("x_var must be 'precision', 'recall', 'f1', or 'score'")
+
+    if y_var not in ["precision", "recall", "f1", "score"]:
+        raise ValueError("y_var must be 'precision', 'recall', 'f1', or 'score'")
+
+    axes_labels = {
+        "precision": "Precision",
+        "recall": "Recall",
+        "f1": "F1 Score",
+        "score": "MS2 similarity threshold",
+    }
+
+    for item in precision_recall_curves.items():
+        if x_var != "score":
+            x_data = item[1][x_var]
+        else:
+            x_data = score_range
+
+        if y_var != "score":
+            y_data = item[1][y_var]
+        else:
+            y_data = score_range
+
+        (line,) = ax.plot(
+            x_data,
+            y_data,
+            label=TOOL_NAMES.get(item[0], item[0]),
+            color=TOOL_COLORS.get(item[0], None),
+            linewidth=3,
+        )
+
+        ax.set_xlim(0.00, 1.01)
+        ax.set_xlabel(axes_labels[x_var], fontsize=18, fontweight="bold")
+        ax.set_ylabel(axes_labels[y_var], fontsize=18, fontweight="bold")
+
+        threshold_recall = confusion_matrix_data[item[0]]["recall"]
+        threshold_precision = confusion_matrix_data[item[0]]["precision"]
+        threshold_score = confusion_matrix_threshold
+
+        threshold_types = {
+            "precision": threshold_precision,
+            "recall": threshold_recall,
+            "score": threshold_score,
+        }
+
+        if x_var != "score":
+            ax.scatter(
+                threshold_types[x_var],
+                threshold_types[y_var],
+                marker="x",
+                color="black",
+                s=100,
+            )
+
+        # store line handles to access colors later
+        lines[item[0]] = line
+
+    ax.legend(
+        loc="best",
+        fontsize=16,
+        title_fontsize=18,
+    )
+
+    ax.set_xticks([0.0, 0.20, 0.40, 0.60, 0.80, 1.0])
+    ax.set_yticks([0.0, 0.20, 0.40, 0.60, 0.80, 1.0])
+    ax.set_xticklabels([0.0, 0.20, 0.40, 0.60, 0.80, 1.0], fontsize=16)
+    ax.set_yticklabels([0.0, 0.20, 0.40, 0.60, 0.80, 1.0], fontsize=16)
+
+    if x_var == "score":
+        ax.axvline(x=confusion_matrix_threshold, color="black", linestyle="--")
+
+    # Now add annotation boxes below the plot
+    ymin, ymax = ax.get_ylim()
+    ypos = ymin - 0.1 * (ymax - ymin)  # starting below the axis
+    xpos_step = 1.0 / len(confusion_matrix_data)  # equally spaced across x-axis
+    for i, (tool, metrics) in enumerate(confusion_matrix_data.items()):
+        tp = metrics["TP"]
+        fn = metrics["FN"]
+        recall = tp / (tp + fn) if (tp + fn) > 0 else 0.0
+        textstr = f"Recall = {tp}/{tp+fn}\n" f"  = {recall:.3f}\n"
+        ax.text(
+            i * xpos_step + xpos_step / 2,
+            ypos,
+            textstr,
+            ha="center",
+            va="top",
+            color=lines[tool].get_color(),
+            bbox=dict(
+                facecolor="white",
+                edgecolor=lines[tool].get_color(),
+                boxstyle="round,pad=0.5",
+            ),
+            fontdict={"fontsize": 12, "fontweight": "bold"},
+        )
+
+    ax.set_title(title, size=20, pad=15, fontweight="bold")
+    # Expand plot so text fits
+    ax.set_ylim(0, 1.02)
+    ax.set_xlim(-0.01, 1.00)
+
+    if _fig_created and save_path:
+        plt.savefig(save_path, dpi=400, bbox_inches="tight")
+
+
 def plot_pr_curves_multi(
     score_range: dict,
     all_precision_recall_curves: dict,
