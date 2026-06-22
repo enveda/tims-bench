@@ -17,7 +17,7 @@ import numpy as np
 import seaborn as sns
 import matplotlib.pyplot as plt
 from matplotlib.colors import to_rgba
-from matplotlib_venn import venn3
+from matplotlib_venn import venn2, venn3
 from upsetplot import from_contents, UpSet
 
 import plotly.graph_objects as go
@@ -730,6 +730,76 @@ def plot_upset_combined(
 
     plt.suptitle(title, y=0.98, fontsize=14, fontweight="bold")
     plt.tight_layout()
+
+    if save_path:
+        plt.savefig(save_path, dpi=400, bbox_inches="tight")
+
+
+def plot_venn_combined(
+    combined_sets: dict,
+    title: str,
+    save_path: str = None,
+    figsize: tuple = (8, 8),
+):
+    """Plot combined annotation overlap as a Venn diagram.
+
+    Uses the same ``combined_sets`` input shape as ``plot_upset_combined``.
+    Supports exactly 2 or 3 tools.
+
+    Parameters
+    ----------
+    combined_sets : dict
+        Dictionary with tool keys and sets of InChIKeys as values.
+    title : str
+        Title for the figure.
+    save_path : str, optional
+        Path where the figure should be saved.
+    figsize : tuple
+        Figure size (width, height).
+    """
+    if not combined_sets:
+        raise ValueError("combined_sets cannot be empty")
+
+    n_tools = len(combined_sets)
+    if n_tools not in (2, 3):
+        raise ValueError(
+            f"Venn diagram requires exactly 2 or 3 tools, got {n_tools}. "
+            "Use plot_upset_combined for higher-order overlaps."
+        )
+
+    tool_keys = list(combined_sets.keys())
+    tool_labels = [TOOL_NAMES.get(tool, tool) for tool in tool_keys]
+    tool_colors = [TOOL_COLORS.get(tool, "#CCCCCC") for tool in tool_keys]
+    tool_sets = [set(combined_sets[tool]) for tool in tool_keys]
+
+    plt.figure(figsize=figsize)
+
+    if n_tools == 2:
+        venn = venn2(
+            subsets=tool_sets,
+            set_labels=tool_labels,
+            subset_label_formatter=lambda x: f"{int(x):,}",
+            set_colors=tool_colors,
+            alpha=0.6,
+        )
+    else:
+        venn = venn3(
+            subsets=tool_sets,
+            set_labels=tool_labels,
+            subset_label_formatter=lambda x: f"{int(x):,}",
+            set_colors=tool_colors,
+            alpha=0.6,
+        )
+
+    for label in venn.set_labels:
+        if label:
+            label.set_fontsize(14)
+
+    for label in venn.subset_labels:
+        if label:
+            label.set_fontsize(12)
+
+    plt.title(title, fontsize=16, fontweight="bold")
 
     if save_path:
         plt.savefig(save_path, dpi=400, bbox_inches="tight")
