@@ -2,7 +2,6 @@
 
 """Constants used in the repo."""
 
-
 NUMBER_FILTERED_PEAKS = "num_filtered_peaks"
 
 FEATURE_ID_COLUMN = "FEATURE_ID"

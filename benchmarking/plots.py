@@ -1472,7 +1472,24 @@ def plot_specific_pr_curves(
         # store line handles to access colors later
         lines[item[0]] = line
 
+    # Reorder legend according to TOOL_NAMES order
+    handles, labels = ax.get_legend_handles_labels()
+    label_to_handle = dict(zip(labels, handles))
+    ordered_handles = []
+    ordered_labels = []
+    for tool_name in TOOL_NAMES.values():
+        if tool_name in label_to_handle:
+            ordered_handles.append(label_to_handle[tool_name])
+            ordered_labels.append(tool_name)
+    # Add any remaining tools not in TOOL_NAMES
+    for tool, handle in label_to_handle.items():
+        if tool not in ordered_labels:
+            ordered_handles.append(handle)
+            ordered_labels.append(tool)
+
     ax.legend(
+        handles=ordered_handles,
+        labels=ordered_labels,
         loc="best",
         fontsize=16,
         title_fontsize=18,
@@ -1489,12 +1506,23 @@ def plot_specific_pr_curves(
     # Now add annotation boxes below the plot
     ymin, ymax = ax.get_ylim()
     ypos = ymin - 0.1 * (ymax - ymin)  # starting below the axis
-    xpos_step = 1.0 / len(confusion_matrix_data)  # equally spaced across x-axis
-    for i, (tool, metrics) in enumerate(confusion_matrix_data.items()):
+
+    # Sort confusion_matrix_data by TOOL_NAMES order (using tool keys)
+    sorted_items = []
+    for tool_key in TOOL_NAMES.keys():
+        if tool_key in confusion_matrix_data:
+            sorted_items.append((tool_key, confusion_matrix_data[tool_key]))
+    # Add any tools not in TOOL_NAMES
+    for tool_key, metrics in confusion_matrix_data.items():
+        if tool_key not in TOOL_NAMES:
+            sorted_items.append((tool_key, metrics))
+
+    xpos_step = 1.0 / len(sorted_items)  # equally spaced across x-axis
+    for i, (tool, metrics) in enumerate(sorted_items):
         tp = metrics["TP"]
         fn = metrics["FN"]
         recall = tp / (tp + fn) if (tp + fn) > 0 else 0.0
-        textstr = f"Recall = {tp}/{tp+fn}\n" f"  = {recall:.3f}\n"
+        textstr = f"Recall = {tp}/{tp+fn} = {recall:.3f}"
         ax.text(
             i * xpos_step + xpos_step / 2,
             ypos,
@@ -1505,9 +1533,9 @@ def plot_specific_pr_curves(
             bbox=dict(
                 facecolor="white",
                 edgecolor=lines[tool].get_color(),
-                boxstyle="round,pad=0.5",
+                boxstyle="round,pad=0.08",
             ),
-            fontdict={"fontsize": 12, "fontweight": "bold"},
+            fontdict={"fontsize": 13, "fontweight": "bold"},
         )
 
     ax.set_title(title, size=20, pad=15, fontweight="bold")
@@ -2214,6 +2242,7 @@ def plot_r2_distribution(
         cut=0,
         alpha=0.3,
         ax=ax,
+        order=list(TOOL_NAMES.values()),
     )
 
     # Add jittered points on top
@@ -2228,6 +2257,7 @@ def plot_r2_distribution(
         edgecolor="white",
         linewidth=0.5,
         ax=ax,
+        order=list(TOOL_NAMES.values()),
     )
 
     # Update x-axis labels to include counts
