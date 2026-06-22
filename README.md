@@ -11,6 +11,8 @@ This repository contains code and data described in detail in our paper (Rajkuma
 * [Data](#data)
 * [Repository structure](#repository-structure)
 * [How to run](#how-to-run)
+* [Notebook overview](#notebook-overview)
+* [How to benchmark your own tool?](#how-to-benchmark-your-own-tool)
 
 ## Citation
 
@@ -133,3 +135,98 @@ uv run python notebooks/01b_annotations.py
 * [05_nist_srm_based_metrics](notebooks/05_nist_srm_based_metrics.ipynb) - Computes precision-recall curves and R² distributions for the NIST SRM spike-in dataset to evaluate annotation accuracy and correlation with expected concentrations.
 * [06a_plant_spikein_base_metrics](notebooks/06a_plant_spikein_base_metrics.ipynb) - Analyzes plant spike-in dataset performance using precision-recall metrics, R² distributions, and concentration-dependent recovery curves across analysis tools.
 * [06b_plant_spikein_overlap](notebooks/06b_plant_spikein_overlap.ipynb) - Visualizes compound detection overlap across analysis tools at different spike-in concentrations using Venn diagrams and identifies compounds detected at all concentration levels.
+
+## How to benchmark your own tool
+
+The benchmarking pipeline is built around a harmonization step that converts any tool's raw export into a standard schema. To add a new tool, you need to: (1) write a harmonizer, (2) register it, (3) update the constants, and (4) run the pipeline.
+
+### 1. Write a harmonizer
+
+Create `benchmarking/harmonizer/yourtool.py` with a function that reads the tool's raw export and returns a `pandas.DataFrame` in the standard schema. The harmonized DataFrame must have the following fixed columns, followed by one column per sample containing peak area/intensity values:
+
+| Column | Description |
+|---|---|
+| `FEATURE_ID` | Unique feature identifier |
+| `M/Z` | Precursor m/z |
+| `RT` | Retention time (minutes) |
+| `ION_MOBILITY` | Ion mobility value (or `"N/A"` if unavailable) |
+| `CCS` | Collision cross section (or `"N/A"` if unavailable) |
+| `ADDUCT` | Adduct type (e.g. `[M+H]+`) |
+| `MS/MS_ASSIGNED` | Boolean — whether an MS2 spectrum is assigned |
+| `MS/MS_MZS` | MS2 fragment m/z values as a list |
+| `MS/MS_INTENSITIES` | MS2 fragment intensities as a list (normalized to sum to 1) |
+
+The existing harmonizers (`benchmarking/harmonizer/mzmine.py`, `metaboscape.py`, `msdial.py`) are the best reference for how to wrangle tool-specific export formats into this schema.
+
+### 2. Register the harmonizer
+
+In `benchmarking/harmonizer/harmonization.py`, import your function and add it to `HARMONIZATION_FUNCTIONS`:
+
+```python
+from benchmarking.harmonizer.yourtool import harmonize_yourtool
+
+HARMONIZATION_FUNCTIONS = {
+    "mzmine": harmonize_mzmine,
+    "metaboscape": harmonize_metaboscape,
+    "msdial-multi": harmonize_msdial_multi_sample,
+    "msdial-multi-combined": harmonize_msdial_multi_sample_combined,
+    "msdial-single": harmonize_msdial_single_sample,
+    "yourtool": harmonize_yourtool,          # add this
+}
+```
+
+Then add a corresponding `case` block in the `match input_tool_type:` statement in the same file to handle file discovery for your tool's expected input format (e.g., which file extensions to look for in the raw directory).
+
+### 3. Update constants and tool detection
+
+In `benchmarking/constants.py`, add your tool's display name and plot color:
+
+```python
+TOOL_NAMES = {
+    ...,
+    "yourtool": "YourTool",
+}
+
+TOOL_COLORS = {
+    ...,
+    "yourtool": "#AABBCC",
+    "YourTool": "#AABBCC",
+}
+```
+
+The tool detection logic in `benchmarking/metrics/base_metrics.py` (`load_all_feature_tables` and `get_base_metrics`) and `benchmarking/loader.py` infers tool identity from the harmonized filename. Each function contains an `if/elif` chain that checks for `"mzmine"`, `"msdial"`, and `"metaboscape"` in the filename. Add your tool there:
+
+```python
+if "mzmine" in file.lower():
+    tool = "mzmine"
+elif "msdial" in file.lower():
+    tool = "msdial"
+elif "metaboscape" in file.lower():
+    tool = "metaboscape"
+elif "yourtool" in file.lower():          # add this
+    tool = "yourtool"
+else:
+    raise ValueError(f"Unknown tool type in file name: {file}")
+```
+
+### 4. Organize your data and run the pipeline
+
+Place your tool's raw export files under the dataset directory following the same layout used by the existing tools:
+
+```text
+data/{dataset}/raw/yourtool/
+    ├── features.csv      # quantification table
+    └── spectra.mgf       # MS2 spectra
+```
+
+Then run the notebooks in order, passing `"yourtool"` as the tool type wherever `input_tool_type` is specified:
+
+```python
+harmonize(
+    input_directory="data/{dataset}/raw/yourtool/",
+    input_tool_type="yourtool",
+    output_path="data/{dataset}/harmonized/{dataset}_yourtool_harmonized.parquet",
+)
+```
+
+After harmonization, the rest of the pipeline (annotation in `01b`, QC in `01c`, and all downstream metric notebooks) works unchanged — it reads from the harmonized parquet files and treats your tool identically to the three tools evaluated in the paper.
