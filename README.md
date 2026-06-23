@@ -1,8 +1,8 @@
 # TIMS-Bench: Towards community standards for benchmarking untargeted trapped ion mobility metabolomics tools and datasets
 
-<!-- [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.14618408.svg)](TBD)) -->
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.20816379.svg)](https://zenodo.org/records/20816379)
 
-This repository contains code and data described in detail in our paper (Rajkumar *et al.*, 2026).
+This repository contains code and data described in detail in our paper (Rajkumar *et al.*, 2026) and on [Zenodo](https://zenodo.org/records/20816379).
 
 ## Table of Contents
 
@@ -135,6 +135,17 @@ uv run python notebooks/01b_annotations.py
 * [05_nist_srm_based_metrics](notebooks/05_nist_srm_based_metrics.ipynb) - Computes precision-recall curves and R² distributions for the NIST SRM spike-in dataset to evaluate annotation accuracy and correlation with expected concentrations.
 * [06a_plant_spikein_base_metrics](notebooks/06a_plant_spikein_base_metrics.ipynb) - Analyzes plant spike-in dataset performance using precision-recall metrics, R² distributions, and concentration-dependent recovery curves across analysis tools.
 * [06b_plant_spikein_overlap](notebooks/06b_plant_spikein_overlap.ipynb) - Visualizes compound detection overlap across analysis tools at different spike-in concentrations using Venn diagrams and identifies compounds detected at all concentration levels.
+* [07_false_positive_analysis](notebooks/07_false_positive_analysis.ipynb) - Analyzes false positive annotations by computing structural similarity (Morgan fingerprints, Tanimoto metric) between incorrectly predicted compounds and ground truth compounds, with SMILES lookup from local mapping files and PubChem fallback.
+
+## Future Utility and Extensibility
+
+The TIMS-Bench benchmarking framework is designed to be extensible and reusable for evaluating new metabolomics analysis tools and methodologies. The modular architecture enables:
+
+* **Tool integration**: New tools can be added by implementing a single harmonizer function that converts raw tool output to the standard schema (see [How to benchmark your own tool](#how-to-benchmark-your-own-tool)).
+* **Dataset scaling**: The pipeline generalizes across datasets of any size. Ground-truth datasets with known compound identities can be added to `data/groundtruth_dataset/` to compute precision-recall metrics for novel tools or algorithms.
+* **Similarity metric expansion**: The similarity calculation framework (`benchmarking/similarity/`) supports new matching approaches beyond spectral entropy and cosine similarity. Tools like DreaMS embeddings are already integrated; custom fingerprinting or machine-learning-based approaches can be plugged in.
+* **Metric composition**: Individual metric computations (base metrics, precision-recall, CCS discrimination, etc.) are independent functions that can be combined or modified to address domain-specific questions.
+* **Benchmarking standards development**: This framework establishes a reproducible, open reference for the metabolomics community, enabling rigorous comparison of improvements over time and facilitating broader adoption of standardized evaluation practices.
 
 ## How to benchmark your own tool
 
