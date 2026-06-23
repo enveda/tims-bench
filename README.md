@@ -1,6 +1,6 @@
 # TIMS-Bench: Towards community standards for benchmarking untargeted trapped ion mobility metabolomics tools and datasets
 
-[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.20816379.svg)](https://zenodo.org/records/20816379)
+[![DOI](https://zenodo.org/badge/doi/10.5281/zenodo.20816379.svg)](https://doi.org/10.5281/zenodo.20816379)
 
 This repository contains code and data described in detail in our paper (Rajkumar *et al.*, 2026) and on [Zenodo](https://zenodo.org/records/20816379).
 
