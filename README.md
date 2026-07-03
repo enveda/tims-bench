@@ -1,6 +1,6 @@
 # TIMS-Bench: Towards community standards for benchmarking untargeted trapped ion mobility metabolomics tools and datasets
 
-[![DOI](https://zenodo.org/badge/doi/10.5281/zenodo.20816379.svg)](https://doi.org/10.5281/zenodo.20816379)
+[![DOI](https://zenodo.org/badge/doi/10.5281/zenodo.20816379.svg)](https://doi.org/10.5281/zenodo.20816379) 
 
 This repository contains code and data described in detail in our paper (Rajkumar *et al.*, 2026) and on [Zenodo](https://zenodo.org/records/20816379).
 
@@ -28,7 +28,7 @@ If you have found our manuscript useful in your work, please consider citing:
 
 ## Data
 
-Datasets are publicly available and can be directly downloaded from **Zenodo** (DOI: TBD).
+Datasets are publicly available and can be directly downloaded from **Zenodo** (DOI: https://doi.org/10.5281/zenodo.20816379).
 Unzip the downloaded files and place them under the `data/` directory as described in [Repository structure](#repository-structure).
 
 ### Repository structure
@@ -222,7 +222,7 @@ else:
 
 ### 4. Organize your data and run the pipeline
 
-Place your tool's raw export files under the dataset directory following the same layout used by the existing tools:
+Place your tool's raw export files under the dataset directory, following the same layout used by the existing tools:
 
 ```text
 data/{dataset}/raw/yourtool/
