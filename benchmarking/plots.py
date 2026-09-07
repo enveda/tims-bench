@@ -44,6 +44,75 @@ from benchmarking.utils import apply_rclr_transform, apply_clr_transform
 pd.set_option("future.no_silent_downcasting", True)
 pd.set_option("mode.chained_assignment", None)
 
+# Metrics the annotation boxes can show, and how each is labelled.
+METRIC_BOX_LABELS = {
+    "TP": "TP",
+    "FP": "FP",
+    "FN": "FN",
+    "precision": "Precision",
+    "recall": "Recall",
+    "f1": "F1",
+}
+COUNT_BOX_METRICS = ("TP", "FP", "FN")
+DEFAULT_BOX_METRICS = ("TP", "FP", "precision", "recall", "f1")
+
+# Threshold guide lines and their labels are annotation, not data, so they stay grey.
+THRESHOLD_LINE_COLOR = "gray"
+
+
+def format_metrics_box(metrics: dict, box_metrics: tuple = DEFAULT_BOX_METRICS) -> str:
+    """Render one tool's metrics as the lines of an annotation box, in the order requested.
+
+    Counts print as integers; precision, recall and F1 print to two decimals and are derived
+    from TP/FP/FN when those are available, so precision and recall can carry the fraction
+    behind the number. A metric is read straight off `metrics` when the counts it needs are
+    missing.
+
+    Parameters:
+    -----------
+    metrics : dict
+        One tool's entry of a confusion_matrix_data dictionary, i.e. {"TP": ..., "FP": ...,
+        "FN": ..., "precision": ..., "recall": ..., "f1": ...}.
+    box_metrics : tuple
+        Which metrics to show, in display order. Any key of `metrics` is allowed, so
+        ("recall",) gives a one-line box and ("TP", "FN", "recall") the recall workings.
+
+    Raises:
+    -------
+    KeyError
+        If a requested metric is neither in `metrics` nor derivable from its counts.
+    """
+    counts = {name: metrics.get(name) for name in COUNT_BOX_METRICS}
+    tp, fp, fn = counts["TP"], counts["FP"], counts["FN"]
+
+    lines = []
+    for metric in box_metrics:
+        label = METRIC_BOX_LABELS.get(metric, metric)
+        derivable = metric in ("precision", "recall", "f1")
+        if metric not in metrics and not derivable:
+            raise KeyError(
+                f"Metric {metric!r} is not available; this tool has {sorted(metrics)}"
+            )
+
+        if metric in COUNT_BOX_METRICS:
+            lines.append(f"{label}={int(metrics[metric]):,}")
+        elif metric == "precision" and None not in (tp, fp):
+            total = tp + fp
+            value = tp / total if total > 0 else 0.0
+            lines.append(f"{label}={value:.2f} ({int(tp):,}/{int(total):,})")
+        elif metric == "recall" and None not in (tp, fn):
+            total = tp + fn
+            value = tp / total if total > 0 else 0.0
+            lines.append(f"{label}={value:.2f} ({int(tp):,}/{int(total):,})")
+        elif metric == "f1" and None not in (tp, fp, fn):
+            total = 2 * tp + fp + fn
+            value = 2 * tp / total if total > 0 else 0.0
+            lines.append(f"{label}={value:.2f}")
+        else:
+            lines.append(f"{label}={metrics[metric]:.2f}")
+
+    return "\n".join(lines)
+
 
 def _plot_radar_single(
     metrics: dict,
@@ -1380,6 +1449,9 @@ def plot_specific_pr_curves(
     fig_size=(10, 10),
     save_path=None,
     ax=None,
+    threshold_lines: list = None,
+    show_metric_boxes: bool = True,
+    box_metrics: tuple = DEFAULT_BOX_METRICS,
 ):
     """
     Plots precision-recall curves for multiple tools.
@@ -1407,6 +1479,16 @@ def plot_specific_pr_curves(
         Path to save the figure. Defaults to None.
     ax (matplotlib.axes.Axes, optional):
         Axes to draw on. If None, a new figure is created. Defaults to None.
+    threshold_lines (list, optional):
+        Score thresholds to mark with a labelled vertical line, used only when x_var is
+        'score'. Defaults to the single confusion_matrix_threshold.
+    show_metric_boxes (bool, optional):
+        Whether to draw the per-tool metric boxes below the axis. Set to False when those
+        numbers get their own panel via plot_metric_boxes. Defaults to True.
+    box_metrics (tuple, optional):
+        Which metrics each box shows, in display order: any of 'TP', 'FP', 'FN', 'precision',
+        'recall' and 'f1'. Pass ("recall",) for a one-line box. Defaults to
+        ('TP', 'FP', 'precision', 'recall', 'f1').
 
     """
     _fig_created = ax is None
@@ -1501,42 +1583,54 @@ def plot_specific_pr_curves(
     ax.set_yticklabels([0.0, 0.20, 0.40, 0.60, 0.80, 1.0], fontsize=16)
 
     if x_var == "score":
-        ax.axvline(x=confusion_matrix_threshold, color="black", linestyle="--")
+        for line_threshold in threshold_lines or [confusion_matrix_threshold]:
+            ax.axvline(x=line_threshold, color=THRESHOLD_LINE_COLOR, linestyle="--")
+            # Label the lines with threshold values inside the plot near x-axis
+            if threshold_lines:
+                ax.text(
+                    line_threshold - 0.05,
+                    0.04,
+                    f"{line_threshold:g}",
+                    transform=ax.get_xaxis_transform(),
+                    ha="center",
+                    va="bottom",
+                    color=THRESHOLD_LINE_COLOR,
+                    fontsize=15,
+                    fontweight="bold",
+                )
 
-    # Now add annotation boxes below the plot
-    ymin, ymax = ax.get_ylim()
-    ypos = ymin - 0.1 * (ymax - ymin)  # starting below the axis
+    if show_metric_boxes:
+        # Now add annotation boxes below the plot
+        ymin, ymax = ax.get_ylim()
+        ypos = ymin - 0.1 * (ymax - ymin)  # starting below the axis
 
-    # Sort confusion_matrix_data by TOOL_NAMES order (using tool keys)
-    sorted_items = []
-    for tool_key in TOOL_NAMES.keys():
-        if tool_key in confusion_matrix_data:
-            sorted_items.append((tool_key, confusion_matrix_data[tool_key]))
-    # Add any tools not in TOOL_NAMES
-    for tool_key, metrics in confusion_matrix_data.items():
-        if tool_key not in TOOL_NAMES:
-            sorted_items.append((tool_key, metrics))
+        # Sort confusion_matrix_data by TOOL_NAMES order (using tool keys)
+        sorted_items = []
+        for tool_key in TOOL_NAMES.keys():
+            if tool_key in confusion_matrix_data:
+                sorted_items.append((tool_key, confusion_matrix_data[tool_key]))
+        # Add any tools not in TOOL_NAMES
+        for tool_key, metrics in confusion_matrix_data.items():
+            if tool_key not in TOOL_NAMES:
+                sorted_items.append((tool_key, metrics))
 
-    xpos_step = 1.0 / len(sorted_items)  # equally spaced across x-axis
-    for i, (tool, metrics) in enumerate(sorted_items):
-        tp = metrics["TP"]
-        fn = metrics["FN"]
-        recall = tp / (tp + fn) if (tp + fn) > 0 else 0.0
-        textstr = f"Recall = {recall:.2f} ({tp}/{tp+fn})"
-        ax.text(
-            i * xpos_step + xpos_step / 2,
-            ypos,
-            textstr,
-            ha="center",
-            va="top",
-            color=lines[tool].get_color(),
-            bbox=dict(
-                facecolor="white",
-                edgecolor=lines[tool].get_color(),
-                boxstyle="round,pad=0.08",
-            ),
-            fontdict={"fontsize": 13, "fontweight": "bold"},
-        )
+        xpos_step = 1.0 / len(sorted_items)  # equally spaced across x-axis
+        for i, (tool, metrics) in enumerate(sorted_items):
+            textstr = format_metrics_box(metrics, box_metrics)
+            ax.text(
+                i * xpos_step + xpos_step / 2,
+                ypos,
+                textstr,
+                ha="center",
+                va="top",
+                color=lines[tool].get_color(),
+                bbox=dict(
+                    facecolor="white",
+                    edgecolor=lines[tool].get_color(),
+                    boxstyle="round,pad=0.3",
+                ),
+                fontdict={"fontsize": 12, "fontweight": "bold"},
+            )
 
     ax.set_title(title, size=20, pad=15, fontweight="bold")
     # Expand plot so text fits
@@ -1545,6 +1639,121 @@ def plot_specific_pr_curves(
 
     if _fig_created and save_path:
         plt.savefig(save_path, dpi=400, bbox_inches="tight")
+
+
+def plot_metric_boxes(
+    confusion_matrix_data_by_threshold: dict,
+    title: str = "Confusion Matrix Metrics",
+    figsize: Tuple[int, int] = (8, 10),
+    save_path: str = None,
+    ax=None,
+    box_metrics: tuple = DEFAULT_BOX_METRICS,
+):
+    """
+    Plot the chosen metrics for every tool at one or more score thresholds.
+
+    Tools run down the rows and thresholds across the columns, so one tool's numbers can be
+    compared across thresholds by reading along its row.
+
+    Parameters:
+    -----------
+    confusion_matrix_data_by_threshold : dict
+        Maps a score threshold to the confusion_matrix_data dictionary that
+        compute_precision_recall_data returns for that threshold, i.e.
+        {0.7: {tool: {"TP": ..., "FP": ..., "FN": ...}}, 0.9: {...}}
+    title : str
+        Title for the panel
+    figsize : tuple
+        Size of the figure, used only when ax is None
+    save_path : str, optional
+        Path to save the figure, used only when ax is None
+    ax : matplotlib.axes.Axes, optional
+        Axes to draw on. If None, a new figure is created.
+    box_metrics : tuple
+        Which metrics each box shows, in display order: any of 'TP', 'FP', 'FN', 'precision',
+        'recall' and 'f1'. Defaults to ('TP', 'FP', 'precision', 'recall', 'f1').
+    """
+    _fig_created = ax is None
+    if _fig_created:
+        _, ax = plt.subplots(figsize=figsize)
+
+    thresholds = sorted(confusion_matrix_data_by_threshold)
+
+    # Tools in the canonical TOOL_NAMES order, so the rows line up with the legends of the
+    # other panels, then anything unexpected.
+    tools = [
+        tool
+        for tool in TOOL_NAMES
+        if any(
+            tool in confusion_matrix_data_by_threshold[threshold]
+            for threshold in thresholds
+        )
+    ]
+    for threshold in thresholds:
+        for tool in confusion_matrix_data_by_threshold[threshold]:
+            if tool not in tools:
+                tools.append(tool)
+
+    ax.set_xlim(0, len(thresholds))
+    # The header sits just under the title; the gap below it separates it from the first row.
+    ax.set_ylim(0, len(tools) + 0.45)
+    ax.set_axis_off()
+
+    for column, threshold in enumerate(thresholds):
+        ax.text(
+            column + 0.5,
+            len(tools) + 0.18,
+            f"Threshold {threshold:g}",
+            ha="center",
+            va="bottom",
+            fontsize=18,
+            fontweight="bold",
+        )
+
+    for row, tool in enumerate(tools):
+        # Rows are filled from the top, so the drawing order matches the tools list.
+        ypos = len(tools) - row - 0.5
+        color = TOOL_COLORS.get(tool, "black")
+
+        # The tool name labels the whole row, centred above its boxes rather than sitting
+        # inside them - the boxes then hold nothing but numbers.
+        ax.text(
+            len(thresholds) / 2,
+            ypos + 0.34,
+            TOOL_NAMES.get(tool, tool),
+            ha="center",
+            va="bottom",
+            color=color,
+            fontdict={"fontsize": 15, "fontweight": "bold"},
+        )
+
+        for column, threshold in enumerate(thresholds):
+            metrics = confusion_matrix_data_by_threshold[threshold].get(tool)
+            if metrics is None:
+                continue
+
+            textstr = format_metrics_box(metrics, box_metrics)
+            ax.text(
+                column + 0.5,
+                ypos - 0.1,
+                textstr,
+                ha="center",
+                va="center",
+                color=color,
+                bbox=dict(
+                    facecolor="white",
+                    edgecolor=color,
+                    boxstyle="round,pad=0.5",
+                ),
+                fontdict={"fontsize": 13, "fontweight": "bold"},
+            )
+
+    ax.set_title(title, size=20, pad=10, fontweight="bold")
+
+    if _fig_created:
+        plt.tight_layout()
+        if save_path:
+            plt.savefig(save_path, dpi=400, bbox_inches="tight")
 
 
 def plot_pr_curves_multi(
@@ -2175,11 +2384,12 @@ def plot_r2_distribution(
     r2_dict,
     significant_only=False,
     significance_threshold=0.05,
-    jitter=0.35,
+    jitter=0.08,
     save_path=None,
     title=None,
     figsize=(10, 6),
     ax=None,
+    point_offset=-0.22,
 ):
     """
     Plot r² distributions as violin plots for all tools.
@@ -2193,13 +2403,17 @@ def plot_r2_distribution(
     significance_threshold : float, optional
         P-value threshold for determining significance when significant_only is True. Defaults to 0.05.
     jitter : float, optional
-        Amount of jitter to apply to the points in the strip plot. Defaults to 0.35.
+        Amount of jitter to apply to the points in the strip plot. Kept narrow so the offset
+        cloud stays clear of the violin. Defaults to 0.08.
     save_path : str, optional
         Directory to save the figure. Defaults to None.
     title : str, optional
         Title for the plot. If None, a default title will be generated based on whether significant_only is True or False.
     figsize : tuple, optional
         Size of the figure (width, height). Defaults to (10, 6).
+    point_offset : float, optional
+        Horizontal shift of the points, in category units, so they sit beside the violin
+        rather than on top of it. Negative moves them left. Defaults to -0.22.
     """
     # Collect all r² values into a DataFrame for violin plot
     all_data = []
@@ -2245,7 +2459,10 @@ def plot_r2_distribution(
         order=list(TOOL_NAMES.values()),
     )
 
-    # Add jittered points on top
+    # Anything the violins already drew; the strip points are the collections added after.
+    n_violin_collections = len(ax.collections)
+
+    # Add jittered points beside each violin
     sns.stripplot(
         data=df,
         x="Tool",
@@ -2260,9 +2477,21 @@ def plot_r2_distribution(
         order=list(TOOL_NAMES.values()),
     )
 
+    # Shift the points off the violin so both stay readable. Seaborn has no offset argument
+    # for a single strip layer, so the offsets it drew are moved directly.
+    if point_offset:
+        for collection in ax.collections[n_violin_collections:]:
+            offsets = collection.get_offsets()
+            if len(offsets):
+                offsets[:, 0] += point_offset
+                collection.set_offsets(offsets)
+
     # Update x-axis labels to include counts
     current_labels = [label.get_text() for label in ax.get_xticklabels()]
-    new_labels = [f"{label}\n(n={tool_counts[label]})" for label in current_labels]
+    # A tool kept by `order` but with no surviving values is absent from tool_counts.
+    new_labels = [
+        f"{label}\n(n={tool_counts.get(label, 0)})" for label in current_labels
+    ]
     ax.set_xticklabels(new_labels, fontdict={"fontsize": 16})
 
     if title is None:

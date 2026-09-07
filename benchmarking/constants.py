@@ -2,7 +2,27 @@
 
 """Constants used in the repo."""
 
+from pathlib import Path
+
 NUMBER_FILTERED_PEAKS = "num_filtered_peaks"
+
+# Repository data directory, resolved from this file so paths work from notebooks and scripts alike
+DATA_DIR = Path(__file__).resolve().parent.parent / "data"
+
+# Local resources used to resolve InChIKeys to SMILES
+SMILES_CACHE_PATH = DATA_DIR / "cache" / "inchikey_smiles_map.json"
+REFRAME_SMILES_PATH = DATA_DIR / "library_spectra" / "reframe_smiles_list.csv"
+
+# Combined spectral library that the annotation step searches, and the cached
+# InChIKey -> source library lookup derived from it
+LIBRARY_SPECTRA_PATH = DATA_DIR / "library_spectra" / "all_sorted_library_spectra.parquet"
+INCHIKEY_LIBRARY_MAP_PATH = DATA_DIR / "cache" / "inchikey_library_map.pq"
+
+# Local resources used to resolve InChIKeys to compound names
+NAME_CACHE_PATH = DATA_DIR / "cache" / "inchikey_name_map.json"
+PLANT_SPIKEIN_LIB_PATH = DATA_DIR / "library_spectra" / "plant_spikein_lib.pq"
+NIST_SRM_LIB_PATH = DATA_DIR / "library_spectra" / "nist_srm_spikein_lib.pq"
+REFRAME_SPIKEIN_LIB_PATH = DATA_DIR / "library_spectra" / "reframe_spikein_lib.pq"
 
 FEATURE_ID_COLUMN = "FEATURE_ID"
 LIBRARY_ID_COLUMN = "LIBRARY_ID"
@@ -11,7 +31,10 @@ LIBRARY_MZS_COLUMN = "LIBRARY_MZS"
 LIBRARY_INTENSITIES_COLUMN = "LIBRARY_INTENSITIES"
 METHOD_COLUMN = "METHOD"
 INCHIKEY_COLUMN = "INCHIKEY"
+INCHIKEY_2D_COLUMN = "inchikey_2d"
 SCORE_COLUMN = "SCORE"
+SMILES_COLUMN = "smiles"
+NAME_COLUMN = "compound_name"
 
 TOOL_COLORS = {
     "metaboscape": "#D46428",

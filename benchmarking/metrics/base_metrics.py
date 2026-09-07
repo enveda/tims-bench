@@ -11,7 +11,19 @@ import pandas as pd
 from itertools import product as itertools_product
 from scipy import stats
 
-from benchmarking.constants import INCHIKEY_COLUMN, SCORE_COLUMN, TRANSFORM_SETTINGS
+from benchmarking.constants import (
+    INCHIKEY_COLUMN,
+    SCORE_COLUMN,
+    SMILES_COLUMN,
+    TRANSFORM_SETTINGS,
+)
+from benchmarking.blank_subtraction import (
+    BLANK_PREFIX,
+    BLANK_RATIO_THRESHOLD,
+    SAMPLE_PREFIX,
+    blank_subtract_feature_table,
+)
+from benchmarking.smiles import add_smiles_to_feature_tables
 from benchmarking.utils import apply_rclr_transform, apply_clr_transform
 
 
@@ -51,6 +63,12 @@ def retrieve_sample_number(path_to_dataset: str) -> int:
 def load_all_feature_tables(
     input_directories: list,
     annotation_subfolder: str = "annotated_spectral_entropy",
+    *,
+    add_smiles: bool = False,
+    blank_subtracted: bool = False,
+    sample_prefix: str = SAMPLE_PREFIX,
+    blank_prefix: str = BLANK_PREFIX,
+    blank_ratio_threshold: float = BLANK_RATIO_THRESHOLD,
 ) -> Dict[str, pd.DataFrame]:
     """
     Helper function to load and merge feature tables across all datasets.
@@ -63,6 +81,25 @@ def load_all_feature_tables(
     annotation_subfolder: str
         Name of the subfolder within each dataset directory that contains the annotated and harmonized files.
         Default is 'annotated_spectral_entropy'.
+    add_smiles: bool
+        If True, add a 'smiles' column mapped from the 'INCHIKEY' annotations via
+        benchmarking.smiles.add_smiles_to_feature_tables (local cache and ReFRAME list first,
+        PubChem as fallback). Default is False.
+    blank_subtracted: bool
+        If True, blank-subtract each dataset before it is merged, via
+        benchmarking.blank_subtraction.blank_subtract_feature_table: features whose mean
+        sample intensity does not stand 'blank_ratio_threshold' times above their mean blank
+        intensity are dropped, and so is every intensity column that is not a sample column.
+        Default is False.
+    sample_prefix: str
+        Prefix of the sample intensity columns, used when blank_subtracted is True.
+    blank_prefix: str
+        Prefix of the blank intensity columns, used when blank_subtracted is True. Datasets
+        outside the ground-truth set name their runs differently, so these two need to match
+        the table (e.g. 'L' and 'Blank_' for MSV000096189).
+    blank_ratio_threshold: float
+        Minimum mean sample / mean blank intensity ratio for a feature to be kept.
+
     Returns:
     --------
     Dict[str, pd.DataFrame]
@@ -117,6 +154,20 @@ def load_all_feature_tables(
                 annotations, on="FEATURE_ID", how="left"
             )
 
+            if blank_subtracted:
+                feature_table, subtraction_summary = blank_subtract_feature_table(
+                    feature_table,
+                    sample_prefix=sample_prefix,
+                    blank_prefix=blank_prefix,
+                    ratio_threshold=blank_ratio_threshold,
+                )
+                print(
+                    f"Blank subtraction ({tool_type}, {os.path.basename(dataset_path)}): "
+                    f"kept {int(subtraction_summary['n_features_out']):,}"
+                    f"/{int(subtraction_summary['n_features_in']):,} features "
+                    f"({subtraction_summary['features_kept_%']}%)"
+                )
+
             if tool_type not in all_tables:
                 all_tables[tool_type] = []
 
@@ -134,6 +185,13 @@ def load_all_feature_tables(
             )
     else:
         updated_tables = all_tables
+
+    if add_smiles:
+        updated_tables = add_smiles_to_feature_tables(
+            dict(updated_tables),
+            inchikey_column=INCHIKEY_COLUMN,
+            smiles_column=SMILES_COLUMN,
+        )
 
     return updated_tables
 
@@ -830,7 +888,7 @@ def compute_r2_values_for_plant_spikein(
 
             formatted_samples[compound_name][conc] = column
 
-        for _, mapping in formatted_samples.items():
+        for compound_name, mapping in formatted_samples.items():
             candidates_per_conc = {}
             skip_sample = False
 
@@ -838,8 +896,6 @@ def compute_r2_values_for_plant_spikein(
                 if conc not in mapping:
                     skip_sample = True
                     break
-
-                compound_name = column.split("_")[1]
 
                 inchikey_nonisomeric = list(
                     set(
