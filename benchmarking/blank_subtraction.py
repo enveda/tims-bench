@@ -105,11 +105,16 @@ def blank_subtract_feature_table(
             f"pass a sample_prefix/blank_prefix that matches it."
         )
 
-    samples = feature_table[sample_columns].apply(pd.to_numeric, errors="coerce")
+    feature_table[sample_columns] = feature_table[sample_columns].apply(
+        pd.to_numeric, errors="coerce"
+    )
+    feature_table[sample_columns] = feature_table[sample_columns].mask(
+        feature_table[sample_columns] < 1000, 0
+    )
 
     # A feature with no measured intensity in any sample cannot be judged against the blanks.
-    has_sample_signal = samples.fillna(0).gt(0).any(axis=1)
-    mean_samples = samples.mean(axis=1)
+    has_sample_signal = feature_table[sample_columns].gt(0).any(axis=1)
+    mean_samples = feature_table[sample_columns].mean(axis=1)
 
     if blank_columns:
         blanks = feature_table[blank_columns].apply(pd.to_numeric, errors="coerce")
@@ -133,9 +138,13 @@ def blank_subtract_feature_table(
             "n_blank_columns": len(blank_columns),
             "n_columns_dropped": len(columns) - len(kept_columns),
             "dropped_no_sample_signal": int((~has_sample_signal).sum()),
-            "dropped_at_or_below_blanks": int((has_sample_signal & ~above_blanks).sum()),
+            "dropped_at_or_below_blanks": int(
+                (has_sample_signal & ~above_blanks).sum()
+            ),
             "n_features_out": int(keep.sum()),
-            "features_kept_%": (round(100 * keep.mean(), 1) if len(feature_table) else 0.0),
+            "features_kept_%": (
+                round(100 * keep.mean(), 1) if len(feature_table) else 0.0
+            ),
         }
     )
     return feature_table.loc[keep, kept_columns], summary

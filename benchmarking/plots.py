@@ -2389,7 +2389,7 @@ def plot_r2_distribution(
     title=None,
     figsize=(10, 6),
     ax=None,
-    point_offset=-0.22,
+    point_offset=0,
 ):
     """
     Plot r² distributions as violin plots for all tools.
@@ -2413,7 +2413,7 @@ def plot_r2_distribution(
         Size of the figure (width, height). Defaults to (10, 6).
     point_offset : float, optional
         Horizontal shift of the points, in category units, so they sit beside the violin
-        rather than on top of it. Negative moves them left. Defaults to -0.22.
+        rather than on top of it. Negative moves them left. Defaults to 0.
     """
     # Collect all r² values into a DataFrame for violin plot
     all_data = []
